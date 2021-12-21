@@ -100,7 +100,7 @@ def extinction(I_sample, I_0, Reff, distance):
     return (1/distance)*(I_ratio-1)*(1-Reff)
 
 def recursive_fit(I_sample,I_0,Reff,distance,reference,verbose=1):
-    """Calculates number density from signal accoding to the scheme:
+    """Calculates number density from signal according to the scheme:
     Extinction -> SVD -> f(wavelegnth) -> Extinction - f(wavelength) -> SVD"""
     alpha = extinction(I_sample,I_0,Reff,distance)
     a,b,c = fit_signal(alpha,reference)
