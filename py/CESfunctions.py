@@ -48,6 +48,25 @@ def spectra_accumulator(npyin,samples,verbose=0):
         print(accum.shape)
     return accum
 
+def spectra_average(spectra,samples,verbose=0):
+    """ Averages a number of samples from an array of spectra """
+    ceaspec = np.copy(spectra)
+    cols=len(ceaspec[0,:])
+
+    fromcol = 1
+    tocol = fromcol + samples
+    accum=np.copy(ceaspec[:,0]).reshape(len(ceaspec[:,0]),1)
+
+    while tocol<=cols:
+        #print(fromcol,tocol)
+        avg=np.average(ceaspec[:,fromcol:tocol],axis=1).reshape(len(ceaspec[:,0]),1)
+        accum=np.concatenate((accum,avg),axis=1)
+        tocol=tocol+samples
+        fromcol=fromcol+samples
+    if verbose==1:
+        print(accum.shape)
+    return accum
+
 def segment_indices(spectrum,minwave,maxwave):
     """Takes a spectrum and returns the indices of the wavelength range
     Is it useful? Might save some writing"""
