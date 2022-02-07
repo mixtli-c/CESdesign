@@ -136,5 +136,52 @@ def recursive_fit(I_sample,I_0,Reff,distance,reference,verbose=1):
     #print(alpha.shape)
     a,b,c = fit_signal(alpha,reference)
     if verbose == 1:
-        print("Primer N: ",density," Segundo N: ",c)
+        print("First N: ",density," Second N: ",c)
     return c
+
+def recursive_fit_2ref(I_sample,I_0,Reff,distance,reference1,reference2,verbose=1):
+    """Calculates number density from signal according to the scheme:
+    Extinction -> SVD -> f(wavelegnth) -> Extinction - f(wavelength) -> SVD"""
+    alpha = extinction(I_sample,I_0,Reff,distance)
+    #print(alpha.shape)
+    a,b,c,d = fit_signal_2ref(alpha,reference1,reference2)
+    density1 = c
+    density2 = d
+    f_l_sg= get_fl_2ref(I_0,I_sample,reference1,reference2,density1,density2,Reff,distance)
+    #print(f_l_sg.shape)
+    alpha = alpha - f_l_sg
+    #print(alpha.shape)
+    a,b,c,d = fit_signal_2ref(alpha,reference1,reference2)
+    if verbose == 1:
+        print("First N1: ",density1," Second N1: ",c)
+        print("First N2: ",density2," Second N2: ",d)
+    return c,d
+
+def fit_signal_2ref(extinction,reference1,reference2):
+    """Uses Singular Value Decomposition to fit a reference with a slope to the extinction spectrum (or extinction
+    minus the parametric function of wavelength). Returns a,b,c,i.e., the coefficients of a+b*wavelength+c*$\sigma*"""
+    #print(extinction.shape)
+    ext=np.copy(extinction).reshape(len(extinction),1)
+    ones = np.ones((len(extinction),1))
+    ref1 = np.copy(reference1)
+    ref2 = np.copy(reference2[:,1].reshape(len(reference2[:,1]),1))
+    svdmat=np.concatenate((ones,ref1,ref2),axis=1)
+    U, S, Vt = np.linalg.svd(svdmat,full_matrices=False)
+    x_hat = Vt.T @ np.linalg.inv(np.diag(S)) @ U.T @ ext
+    a=x_hat[0,0]
+    b=x_hat[1,0]
+    c=x_hat[2,0]
+    d=x_hat[3,0]
+    return a,b,c,d
+
+def get_fl_2ref(I_0,I_sample,reference1,reference2,density1,density2,Reff,distance,npoints=17,npoly=3):
+    """Calculates parametric function of wavelength, requires Reff. Savitzky-Golay parameters can be modified"""
+    I_ratio=(I_0/I_sample)
+    #print(I_ratio.shape)
+    ref1_reshape=np.copy(reference1[:,1]).reshape(len(reference1[:,1]),1)
+    ref2_reshape=np.copy(reference2[:,1]).reshape(len(reference2[:,1]),1)
+    f_c=(((I_ratio-1)/distance)*(1-Reff))-ref1_reshape*density1-ref2_reshape*density2
+    f_c_sg=scs.savgol_filter(f_c[:,0], npoints, npoly)
+    #print(I_ratio.shape,f_c.shape,f_c_sg.shape)
+    return f_c_sg.reshape(len(f_c[:,0]),1)
+

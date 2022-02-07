@@ -1,6 +1,7 @@
+import os
+import time
 import numpy as np
 import datetime as dt
-import time
 import matplotlib.pyplot as plt
 import scipy.signal as scs
 from matplotlib.dates import DateFormatter
@@ -10,11 +11,29 @@ import avaspec as av
 
 #########################################################################################
 ### USER CONFIGURATION (from configuration file)                                      ###
+
 accums = conf.accums                    # Accumulations
 checkrate = conf.checkrate              # Query freq. to check if ready (calls per itime)
-samples = conf.samples                  # Number of accumulated measurements
+samples = conf.samples_blank            # Number of accumulated measurements
 itime = conf.itime                      # Integration time in ms
 averages = conf.averages                # Number of integrations to average 
+
+#########################################################################################
+### Making a subdirectory for generated files %Y%m%d                                  ###
+
+parent = '.'
+directory = dt.datetime.now().strftime('%Y%m%d')
+path = os.path.join(parent,directory)   # path of the folder wherein to store data
+
+# Tries to make a new folder with the current date, does nothing if folder already
+# exists
+
+try:
+    os.mkdir(path)
+except:
+    pass
+
+path_file = path + conf.folder_symbol   # full path to append filename when writing
 
 #########################################################################################
 ### Instrument initialization                                                         ###
@@ -68,7 +87,8 @@ scans = 1                       # Number of scans (only last is recorded)
 ### LOOPS for accumulations and sample logging                                        ###
 
 plt.ion()                       # Interactive plot
-fig = fig=plt.figure()          # Figure initialization
+fig = plt.figure()              # Figure initialization
+ax1 = fig.add_subplot(111)      # Axes 1: Signal
 
 t0=dt.datetime.now()            # Start time
 
@@ -98,10 +118,14 @@ for n in range(samples):        # Sample loop
         counts = np.add(counts,spectra) 
     
     ### Plotting
-    fig.clear()
-    plt.plot(wavelengths,counts)
-    plt.show()
-    plt.pause(0.001)
+    ax1.cla()
+    ax1.plot(wavelengths,counts)
+    fig.canvas.draw()
+    fig.canvas.flush_events()
+    #fig.clear()
+    #plt.plot(wavelengths,counts)
+    #plt.show()
+    #plt.pause(0.001)
 
     ### Measurements array
     measurements = np.concatenate((measurements,counts.reshape(len(counts),1)),axis=1)
@@ -109,10 +133,10 @@ for n in range(samples):        # Sample loop
 t1=dt.datetime.now()            # End time
 
 # we generate a name to save the background 
-blank_archive = "Ibackground" + t1.strftime("%y%m%d%H%M")
+blank_archive = "Ib" + t1.strftime("%y%m%d%H%M") +".txt"
 
 np.save("background", measurements)     # for use by BBCEAS_Measure
-np.save(blank_archive, measurements)    # for archiving (further analysis)
+np.savetxt(path_file + blank_archive, measurements)    # for archiving (further analysis)
 
 print("Seconds elapsed: ",(t1-t0).total_seconds())
 print("Shape of measurements array: ",measurements.shape)

@@ -85,12 +85,15 @@ def ref_interpolate(reference,spectrum):
     ref_interpolated=np.concatenate((wavel,interp),axis=1)
     return ref_interpolated
 
-def get_fl(I_0,I_sample,reference,density,Reff,distance,npoints=19,npoly=3):
+def get_fl(I_0,I_sample,reference,density,Reff,distance,npoints=17,npoly=3):
     """Calculates parametric function of wavelength, requires Reff. Savitzky-Golay parameters can be modified"""
     I_ratio=(I_0/I_sample)
-    f_c=(((I_ratio-1)/distance)*(1-Reff))-reference[:,1]*density
-    f_c_sg=scs.savgol_filter(f_c, npoints, npoly)
-    return f_c_sg
+    #print(I_ratio.shape)
+    ref_reshape=np.copy(reference[:,1]).reshape(len(reference[:,1]),1)
+    f_c=(((I_ratio-1)/distance)*(1-Reff))-ref_reshape*density
+    f_c_sg=scs.savgol_filter(f_c[:,0], npoints, npoly)
+    #print(I_ratio.shape,f_c.shape,f_c_sg.shape)
+    return f_c_sg.reshape(len(f_c[:,0]),1)
 
 def get_Reff(I_0,I_sample,reference,density,distance,npoints=19,npoly=3):
     """Calculates Reff, requires clean, calibrated sample (no f($\lambda)). Savitzky-Golay parameters can be modified"""
@@ -102,6 +105,7 @@ def get_Reff(I_0,I_sample,reference,density,distance,npoints=19,npoly=3):
 def fit_signal(extinction,reference):
     """Uses Singular Value Decomposition to fit a reference with a slope to the extinction spectrum (or extinction
     minus the parametric function of wavelength). Returns a,b,c,i.e., the coefficients of a+b*wavelength+c*$\sigma*"""
+    #print(extinction.shape)
     ext=np.copy(extinction).reshape(len(extinction),1)
     ones = np.ones((len(extinction),1))
     ref = np.copy(reference)
@@ -116,17 +120,21 @@ def fit_signal(extinction,reference):
 def extinction(I_sample, I_0, Reff, distance):
     """Calculates extinction spectrum"""
     I_ratio=(I_0/I_sample)
+    #print(I_ratio.shape)
     return (1/distance)*(I_ratio-1)*(1-Reff)
 
 def recursive_fit(I_sample,I_0,Reff,distance,reference,verbose=1):
     """Calculates number density from signal according to the scheme:
     Extinction -> SVD -> f(wavelegnth) -> Extinction - f(wavelength) -> SVD"""
     alpha = extinction(I_sample,I_0,Reff,distance)
+    #print(alpha.shape)
     a,b,c = fit_signal(alpha,reference)
     density = c
     f_l_sg= get_fl(I_0,I_sample,reference,density,Reff,distance)
+    #print(f_l_sg.shape)
     alpha = alpha - f_l_sg
+    #print(alpha.shape)
     a,b,c = fit_signal(alpha,reference)
     if verbose == 1:
-        print("Primer N: ",density," Segundo N: ",c)
+        print("First N: ",density," Second N: ",c)
     return c

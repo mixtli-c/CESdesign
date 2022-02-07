@@ -1,6 +1,7 @@
+import os
+import time
 import numpy as np
 import datetime as dt
-import time
 import matplotlib.pyplot as plt
 import scipy.signal as scs
 from matplotlib.dates import DateFormatter
@@ -37,9 +38,25 @@ Reff= conf.Reff
 #########################################################################################
 ### Reference and Background file loading for analisis                                ###
 no2reference = np.load(no2_refname)
-#chochoref = np.load(chocho_refname)
+chochoref = np.load(chocho_refname)
 background = np.load(back_filename)
 
+#########################################################################################
+### Making a subdirectory for generated files %Y%m%d                                  ###
+
+parent = '.'
+directory = dt.datetime.now().strftime('%Y%m%d')
+path = os.path.join(parent,directory)   # path of the folder wherein to store data
+
+# Tries to make a new folder with the current date, does nothing if folder already
+# exists
+
+try:
+    os.mkdir(path)
+except:
+    pass
+
+path_file = path + conf.folder_symbol   # full path to append filename when writing
 
 #########################################################################################
 ### Instrument initialization                                                         ###
@@ -93,14 +110,20 @@ scans = 1                       # Number of scans (only last is recorded)
 ### LOOPS for accumulations and sample logging                                        ###
 
 plt.ion()                       # Interactive plot
-fig = fig=plt.figure()          # Figure initialization
+fig = plt.figure()              # Figure initialization
+ax1 = fig.add_subplot(211)      # Axes 1 : Signal
+ax2 = fig.add_subplot(212)      # Axes 2 : Concentration NO2
+ax3 = ax2.twinx()               # Axes 3 : Concentration CHOCHO
 
 t0=dt.datetime.now()            # Start time
 
 # Initializing timestamp and concentration list, and measurement array
 measurements = np.array(wavelengths).reshape(len(wavelengths),1)
-timestamp = []
-ppbs = []
+meastime = np.zeros(samples,dtype='U19')
+meastime2 = []
+ppbs = np.zeros(samples)
+ppbs2 = np.zeros(samples)
+area = np.zeros(samples)
 
 for n in range(samples):        # Sample loop
     print("Measurement number: ", n+1)
@@ -124,50 +147,64 @@ for n in range(samples):        # Sample loop
         spectra = np.array(ret[1][0:len(wavelengths)])
         counts = np.add(counts,spectra) 
     
-    ### Plotting
-    fig.clear()
-    plt.plot(wavelengths,counts)
-    plt.show()
-    plt.pause(0.001)
-
-    ### Measurements array
-    measurements = np.concatenate((measurements,counts.reshape(len(counts),1)),axis=1)
-    
     ### Calculating number density
     sample = np.copy(counts.reshape(len(counts),1))
-    minwave,maxwave = cf.segment_indices(measurements[:,0:2],lower_wavelength,upper_wavelength)
+    minwave,maxwave = cf.segment_indices(measurements[:,0:2],lower_wavelength,
+            upper_wavelength)
     bckg = np.copy(background[minwave:maxwave,:])
     no2ref = np.copy(no2reference[minwave:maxwave,:])
+    glyref = np.copy(chochoref[minwave:maxwave,:])
     I_sample = np.copy(sample[minwave:maxwave,:])
     I_0 = np.average(bckg[:,1:],axis=1).reshape(len(bckg),1)
-    #print(sample.shape,I_sample.shape,I_0.shape,no2ref.shape)
+    
+    ### This one does everything (see recursive_fit_2ref function in CESfunctions.py)
+    ndensity1, ndensity2 = cf.recursive_fit_2ref(I_sample, I_0, Reff, distance, 
+            no2ref,glyref)
+    
+    ### The timestamp for this measurement is now
+    timenow = dt.datetime.now()
+    stamp = timenow.strftime('%y%m%d%H%M%S')
+    meastime2.append(timenow)
 
-    # This one does everything (see recursive_fit function for CESfunctions.py)
-    ndensity = cf.recursive_fit(I_sample, I_0, Reff, distance, no2ref)
-    ppb = ndensity/2.5e10
-    print('NO2 ppb: ', ppb)
+    ### Add sample to measurements array and save individual sample datafile
+    measurements = np.concatenate((measurements,counts.reshape(len(counts),1)),axis=1)
     
-    # Add timestamp and ppb to lists
-    ppbs.append(ppb)
-    timestamp.append(dt.datetime.now)
-    
+    np.savetxt(path_file+'Is'+stamp+'.txt',measurements[:,[0,n+1]],fmt='%s')
+
+    ### Populate ppbs and meastime arrays with currents sample, make/overwrite datafile
+    ppbs[n] = ndensity1/2.5e10
+    ppbs2[n] = ndensity2/2.5e10
+    meastime[n] = timenow.strftime('%Y/%m/%d-%H:%M:%S')
+    area[n] = np.trapz(counts[minwave:maxwave+1])
+       
+    np.savetxt(path_file+'Mtemp.txt',np.column_stack((meastime[:n+1],ppbs[:n+1],
+        ppbs2[:n+1],area[:n+1])), fmt='%s')
+
+    # Print calculated NO2 in ppb
+    print('NO2 ppb: ', ppbs[n], 'CHOCHO ppb: ', ppbs2[n])
+          
+    ### Plotting
+    ax1.cla()
+    ax2.cla()
+    ax3.cla()
+    ax1.plot(wavelengths[minwave:maxwave+1],counts[minwave:maxwave+1])
+    ax2.plot(meastime2[:n+1],ppbs[:n+1],'-g')
+    ax3.plot(meastime2[:n+1],ppbs2[:n+1],'-b',alpha=0.5)
+    ax2.xaxis.set_major_formatter(DateFormatter("%H:%M"))
+    fig.canvas.draw()
+    fig.canvas.flush_events()
+   
 
 t1=dt.datetime.now()            # End time
 
-# we generate a name to save the measurements
-sample_archive = "Isample" + t1.strftime("%y%m%d%H%M")
+# We save all measurements in a numpy file
+np.save(path_file + "Isamples" + t1.strftime("%y%m%d%H%M"), measurements)
 
-np.save(sample_archive, measurements)   # for archiving (further analysis)
-
-# we generate a name to save the timestamped concentrations
-conc_filename = "measurements" + t1.strftime("%y%m%d%H%M")
-
-conc = np.concatenate((np.asarray(timestamp).reshape(len(timestamp),1),
-    np.asarray(ppbs).reshape(len(ppbs),1)),axis=1)
-np.save(conc_filename, conc)
+# We save all concentrations in a datafile
+np.savetxt(path_file + "M" + t1.strftime('%y%m%d%H%M') + '.txt',
+        np.column_stack((meastime,ppbs,ppbs2,area)), fmt='%s')
 
 
 print("Seconds elapsed: ",(t1-t0).total_seconds())
 print("Shape of measurements array: ",measurements.shape)
-print("Shape of concentrations array: ",conc.shape)
 print("EOF")
