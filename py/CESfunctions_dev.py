@@ -3,8 +3,8 @@ import glob
 import scipy.signal as scs
 
 def avantes_aggregator(filepath,fileout):
-    """ Aggregates Avantes ASCII 2D spectra, takes the log folder (avantes generated) and the name
-    (with path) of the output npy """
+    """ Aggregates Avantes ASCII 2D spectra, takes the log folder (avantes generated) and
+    the name (with path) of the output npy """
     files = glob.glob(filepath+'*.TXT')
     #print(files)
     for ii,filename in enumerate(files):
@@ -18,7 +18,8 @@ def avantes_aggregator(filepath,fileout):
                 lines=line.split(';')
                 wavelength.append(float(lines[0]))
                 counts.append(float(lines[1]))
-            spectra=np.concatenate((np.array(wavelength,ndmin=2).T,np.array(counts,ndmin=2).T),axis=1)
+            spectra=np.concatenate((np.array(wavelength,ndmin=2).T,np.array(counts,
+                ndmin=2).T),axis=1)
         else:
             with open(filename) as file:
                 lineas=file.readlines()
@@ -86,7 +87,8 @@ def ref_interpolate(reference,spectrum):
     return ref_interpolated
 
 def get_fl(I_0,I_sample,reference,density,Reff,distance,npoints=17,npoly=3):
-    """Calculates parametric function of wavelength, requires Reff. Savitzky-Golay parameters can be modified"""
+    """Calculates parametric function of wavelength, requires Reff. 
+    Savitzky-Golay parameters can be modified"""
     I_ratio=(I_0/I_sample)
     #print(I_ratio.shape)
     ref_reshape=np.copy(reference[:,1]).reshape(len(reference[:,1]),1)
@@ -96,15 +98,17 @@ def get_fl(I_0,I_sample,reference,density,Reff,distance,npoints=17,npoly=3):
     return f_c_sg.reshape(len(f_c[:,0]),1)
 
 def get_Reff(I_0,I_sample,reference,density,distance,npoints=19,npoly=3):
-    """Calculates Reff, requires clean, calibrated sample (no f($\lambda)). Savitzky-Golay parameters can be modified"""
+    """Calculates Reff, requires clean, calibrated sample (no f($\lambda)). 
+    Savitzky-Golay parameters can be modified"""
     I_ratio=(I_0/I_sample)
     Reff = 1-(((reference[:,1]*density)*distance)/(I_ratio-1)) 
     Reff_sg=scs.savgol_filter(Reff, npoints, npoly)
     return Reff_sg   
 
 def fit_signal(extinction,reference):
-    """Uses Singular Value Decomposition to fit a reference with a slope to the extinction spectrum (or extinction
-    minus the parametric function of wavelength). Returns a,b,c,i.e., the coefficients of a+b*wavelength+c*$\sigma*"""
+    """Uses Singular Value Decomposition to fit a reference with a slope to the 
+    extinction spectrum (or extinction minus the parametric function of wavelength). 
+    Returns a,b,c,i.e., the coefficients of a+b*wavelength+c*$\sigma$"""
     #print(extinction.shape)
     ext=np.copy(extinction).reshape(len(extinction),1)
     ones = np.ones((len(extinction),1))
@@ -141,13 +145,15 @@ def recursive_fit(I_sample,I_0,Reff,distance,reference,verbose=1):
 
 def recursive_fit_2ref(I_sample,I_0,Reff,distance,reference1,reference2,verbose=1):
     """Calculates number density from signal according to the scheme:
-    Extinction -> SVD -> f(wavelegnth) -> Extinction - f(wavelength) -> SVD"""
+    Extinction -> SVD -> f(wavelegnth) -> Extinction - f(wavelength) -> SVD
+    uses two reference spectra to fit"""
     alpha = extinction(I_sample,I_0,Reff,distance)
     #print(alpha.shape)
     a,b,c,d = fit_signal_2ref(alpha,reference1,reference2)
     density1 = c
     density2 = d
-    f_l_sg= get_fl_2ref(I_0,I_sample,reference1,reference2,density1,density2,Reff,distance)
+    f_l_sg= get_fl_2ref(I_0,I_sample,reference1,reference2,density1,density2,Reff,
+            distance)
     #print(f_l_sg.shape)
     alpha = alpha - f_l_sg
     #print(alpha.shape)
@@ -158,8 +164,10 @@ def recursive_fit_2ref(I_sample,I_0,Reff,distance,reference1,reference2,verbose=
     return c,d
 
 def fit_signal_2ref(extinction,reference1,reference2):
-    """Uses Singular Value Decomposition to fit a reference with a slope to the extinction spectrum (or extinction
-    minus the parametric function of wavelength). Returns a,b,c,i.e., the coefficients of a+b*wavelength+c*$\sigma*"""
+    """Uses Singular Value Decomposition to fit two references with a slope to the 
+    extinction spectrum (or extinction minus the parametric function of wavelength). 
+    Returns a,b,c,d,i.e., the coefficients of a+b*wavelength+c*$\sigma$+d*$\sigma$
+    uses to reference spectra"""
     #print(extinction.shape)
     ext=np.copy(extinction).reshape(len(extinction),1)
     ones = np.ones((len(extinction),1))
@@ -174,8 +182,11 @@ def fit_signal_2ref(extinction,reference1,reference2):
     d=x_hat[3,0]
     return a,b,c,d
 
-def get_fl_2ref(I_0,I_sample,reference1,reference2,density1,density2,Reff,distance,npoints=17,npoly=3):
-    """Calculates parametric function of wavelength, requires Reff. Savitzky-Golay parameters can be modified"""
+def get_fl_2ref(I_0,I_sample,reference1,reference2,density1,density2,Reff,distance,
+        npoints=17,npoly=3):
+    """Calculates parametric function of wavelength, requires Reff. 
+    Savitzky-Golay parameters can be modified
+    this should be used with the 2ref functions"""
     I_ratio=(I_0/I_sample)
     #print(I_ratio.shape)
     ref1_reshape=np.copy(reference1[:,1]).reshape(len(reference1[:,1]),1)
@@ -185,3 +196,58 @@ def get_fl_2ref(I_0,I_sample,reference1,reference2,density1,density2,Reff,distan
     #print(I_ratio.shape,f_c.shape,f_c_sg.shape)
     return f_c_sg.reshape(len(f_c[:,0]),1)
 
+def get_fl_broad(alpha,reference1,reference2,density1,density2,npoints=51,npoly=8):
+    """Calculates parametric function of wavelength, this one requires the extinction
+    to be already calculated as an imput, but is broader and much simpler
+    This is also for two references but to be used with new fit_signal_w_fl function"""
+    residual = alpha - reference1[:,1]*density1-reference2[:,1]*density2
+    fl = scs.savgol_filter(residual,npoints,npoly)
+    return fl
+
+def fit_signal_w_fl(extinction,f_l,reference1,reference2):
+    """Uses Singular Value Decomposition to fit two references with a parametric function
+    f($\lambda$). Returns a,b,c,d, i.e. the coefficients of 
+    a + b*f($\lambda$) + c*Ref1 + d*Ref2
+    This incorporates the parametric function to the matrix, to avoid overfitting, a broad
+    parametric function should be used, e.g. the one obtained from get_fl_broad"""
+    ext = np.copy(extinction).reshape(len(extinction),1)
+    flam = np.copy(f_l).reshape(len(f_l),1)
+    ones = np.ones((len(extinction),1))
+    ref1 = np.copy(reference1[:,1].reshape(len(reference1[:,1]),1))
+    ref2 = np.copy(reference2[:,1].reshape(len(reference2[:,1]),1))
+    svdmat=np.concatenate((ones,flam,ref1,ref2),axis=1)
+    U, S, Vt = np.linalg.svd(svdmat,full_matrices=False)
+    x_hat = Vt.T @ np.linalg.inv(np.diag(S)) @ U.T @ ext
+    a=x_hat[0,0]
+    b=x_hat[1,0]
+    c=x_hat[2,0]
+    d=x_hat[3,0]
+    return a,b,c,d
+
+def fit_alg_1(I_sample,I_0,Reff,distance,reference1,reference2,verbose=1,parameters=0):
+    """Fitting algorithm 1:
+    Calculates the extinction, fits two references using SVD, then obtains a 
+    parametric function, recalculates the original extinction with the two
+    references and the parametric function
+    Developed to try to clean the glyoxal area of the signal as much as possible."""
+    alpha = extinction(I_sample,I_0,Reff,distance)
+    a,b,c,d = fit_signal_2ref(alpha,reference1,reference2)
+    density1 = c
+    density2 = d
+    if c<0 and d<0:
+        c = 0
+        d = 0
+    elif c < 0:
+        c = 0
+    elif d < 0:
+        d = 0
+    fl = get_fl_broad(alpha,reference1,reference2,c,d,npoints=51,npoly=8)
+    a,b,c,d = fit_signal_w_fl(alpha,fl,reference1,reference2)
+
+    if verbose == 1:
+        print("First N1: ",density1/2.5e10," Second N1: ",c/2.5e10)
+        print("First N2: ",density2/2.5e10," Second N2: ",d/2.5e10)
+    if parameters == 1:
+        return alpha,fl,a,b,c,d
+    else:
+        return c,d
