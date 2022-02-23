@@ -196,12 +196,14 @@ def get_fl_2ref(I_0,I_sample,reference1,reference2,density1,density2,Reff,distan
     #print(I_ratio.shape,f_c.shape,f_c_sg.shape)
     return f_c_sg.reshape(len(f_c[:,0]),1)
 
-def get_fl_broad(alpha,reference1,reference2,density1,density2,npoints=51,npoly=8):
+def get_fl_broad(alpha,reference1,reference2,density1,density2,npoints=81,npoly=8):
     """Calculates parametric function of wavelength, this one requires the extinction
     to be already calculated as an imput, but is broader and much simpler
     This is also for two references but to be used with new fit_signal_w_fl function"""
-    residual = alpha - reference1[:,1]*density1-reference2[:,1]*density2
-    fl = scs.savgol_filter(residual,npoints,npoly)
+    ref1_reshape=np.copy(reference1[:,1]).reshape(len(reference1[:,1]),1)
+    ref2_reshape=np.copy(reference2[:,1]).reshape(len(reference2[:,1]),1)
+    residual = alpha - ref1_reshape*density1-ref2_reshape*density2
+    fl = scs.savgol_filter(residual[:,0],npoints,npoly)
     return fl
 
 def fit_signal_w_fl(extinction,f_l,reference1,reference2):
@@ -241,6 +243,7 @@ def fit_alg_1(I_sample,I_0,Reff,distance,reference1,reference2,verbose=1,paramet
         c = 0
     elif d < 0:
         d = 0
+    alpha = alpha.reshape(len(alpha),1)
     fl = get_fl_broad(alpha,reference1,reference2,c,d,npoints=51,npoly=8)
     a,b,c,d = fit_signal_w_fl(alpha,fl,reference1,reference2)
 

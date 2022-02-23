@@ -158,7 +158,7 @@ for n in range(samples):        # Sample loop
     I_0 = np.average(bckg[:,1:],axis=1).reshape(len(bckg),1)
     
     ### This one does everything (see recursive_fit_2ref function in CESfunctions.py)
-    ndensity1, ndensity2 = cf.recursive_fit_2ref(I_sample, I_0, Reff, distance, 
+    ndensity1, ndensity2 = cf.fit_alg_1(I_sample, I_0, Reff, distance, 
             no2ref,glyref)
     
     ### The timestamp for this measurement is now

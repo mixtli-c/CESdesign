@@ -21,7 +21,7 @@ averages = 1
 
 # Number of samples to take (e.g. 30 for blank, 999999 for a long sampling event)
 samples_blank = 30
-samples = 500
+samples = 60
 
 # How many times it will query the instrument to make see if ready (calls per itime)
 checkrate = 10
