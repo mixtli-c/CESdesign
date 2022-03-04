@@ -196,7 +196,7 @@ def get_fl_2ref(I_0,I_sample,reference1,reference2,density1,density2,Reff,distan
     #print(I_ratio.shape,f_c.shape,f_c_sg.shape)
     return f_c_sg.reshape(len(f_c[:,0]),1)
 
-def get_fl_broad(alpha,reference1,reference2,density1,density2,npoints=81,npoly=8):
+def get_fl_broad(alpha,reference1,reference2,density1,density2,npoints=51,npoly=8):
     """Calculates parametric function of wavelength, this one requires the extinction
     to be already calculated as an imput, but is broader and much simpler
     This is also for two references but to be used with new fit_signal_w_fl function"""
@@ -254,3 +254,62 @@ def fit_alg_1(I_sample,I_0,Reff,distance,reference1,reference2,verbose=1,paramet
         return alpha,fl,a,b,c,d
     else:
         return c,d
+
+def Mfile_read(mfilename):
+    """This function reads a measurements text file (Mfile) and generates lists of the
+    data. Mfile must be 2, 3 or 4 columns, we should not need more.
+    Requires the filename.
+    Returns 4 lists corresponding to 4 columns, excess columns are empty lists."""
+    
+    with open(mfilename,ncols) as f:
+        lines = f.readlines()
+
+    data = []
+
+    for line in lines:
+        a = line.strip('\n')
+        data.append(a.split(' '))
+
+    col1 = []
+    col2 = []
+    col3 = []
+    col4 = []
+    for ele in data:
+        col1.append(dt.datetime.strptime(ele[0],'%Y/%m/%d-%H:%M:%S'))
+        col2.append(float(ele[1]))
+        
+        try:
+            col3.append(float(ele[2]))
+            col4.append(float(ele[3]))
+        except:
+            try:
+                col3.append(float(ele[2]))
+            except:
+                pass
+
+    return col1,col2,col3,col4
+
+def RAMA_read(ramafilename):
+    """ This function takes a RAMA file and filters NO2 data, then corrects the timestamp
+    of that data, it sorts 24h as 0h of the same day, RAMA might be referring to the 
+    next day, however, so this function might need some fixing later
+    Requires the filename
+    Returns two lists, one for the dates and one for the ppbs"""
+
+    df = pd.read_csv(ramafilename)
+    df2 = df[df.Parametro == "NO2"]
+    dates = []
+    
+    for ele in df2.Date:
+        try:
+            dates.append(dt.datetime.strptime(ele,'%Y-%m-%d %H:%M'))
+        except:
+            ele2=ele.replace('24','00',1)
+            dates.append(dt.datetime.strptime(ele2,'%Y-%m-%d %H:%M'))
+
+    ppbs = []
+    for ele in df2.RawValue:
+        ppbs.append(ele)
+
+    return dates,ppbs
+
