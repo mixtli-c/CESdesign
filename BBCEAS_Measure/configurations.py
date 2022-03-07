@@ -21,7 +21,7 @@ averages = 1
 
 # Number of samples to take (e.g. 30 for blank, 999999 for a long sampling event)
 samples_blank = 30
-samples = 60
+samples = 400
 
 # How many times it will query the instrument to make see if ready (calls per itime)
 checkrate = 10
@@ -38,10 +38,10 @@ upper_wavelength = 459
 
 # Reference and background filenames to load, they should be located in the local dir
 back_filename = "background.npy"
-no2_refname = "NO2_AvSC_corr.npy"
-chocho_refname = "CHOCHO_AvSC_corr.npy"
+no2_refname = "NO2.npy"
+chocho_refname = "CHOCHO.npy"
 
 # Effective Reflectivity, check lab notebook on more information, can be a vector 
 # to call using np.load, or it can be a constant
-Reff = 0.99955
+Reff = 0.99945
 
