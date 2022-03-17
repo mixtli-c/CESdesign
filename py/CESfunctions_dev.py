@@ -308,11 +308,13 @@ def RAMA_read(ramafilename):
         except:
             try:
                 ele2=ele.replace('24','00',1)
-                dates.append(dt.datetime.strptime(ele2,'%Y-%m-%d %H:%M'))
+                dates.append(dt.datetime.strptime(ele2,'%Y-%m-%d %H:%M')+
+                        dt.timedelta(days=1))
             except: 
                 ele2=ele.replace('24','00',2)
                 ele3=ele2.replace('00','24',1)
-                dates.append(dt.datetime.strptime(ele3, '%Y-%m-%d %H:%M'))
+                dates.append(dt.datetime.strptime(ele3, '%Y-%m-%d %H:%M')+
+                        dt.timedelta(days=1))
 
     ppbs = []
     for ele in df2.RawValue:
