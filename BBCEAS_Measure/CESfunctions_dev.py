@@ -306,8 +306,15 @@ def RAMA_read(ramafilename):
         try:
             dates.append(dt.datetime.strptime(ele,'%Y-%m-%d %H:%M'))
         except:
-            ele2=ele.replace('24','00',1)
-            dates.append(dt.datetime.strptime(ele2,'%Y-%m-%d %H:%M'))
+            try:
+                ele2=ele.replace('24','00',1)
+                dates.append(dt.datetime.strptime(ele2,'%Y-%m-%d %H:%M')+
+                        dt.timedelta(days=1))
+            except: 
+                ele2=ele.replace('24','00',2)
+                ele3=ele2.replace('00','24',1)
+                dates.append(dt.datetime.strptime(ele3, '%Y-%m-%d %H:%M')+
+                        dt.timedelta(days=1))
 
     ppbs = []
     for ele in df2.RawValue:
@@ -315,3 +322,27 @@ def RAMA_read(ramafilename):
 
     return dates,ppbs
 
+def avantes_calibrator(length,intercept,c1,c2,c3):
+    """Takes the length of ha spectrum (i.e. number of pixels)
+    and the calibration factors, generates corrected wavelengths
+    as a pixels x 1 array"""
+    waves = []
+    for i in range(length):
+        pixel = i+1
+        wv= intercept+c1*pixel+c2*pow(pixel,2)+c3*pow(pixel,3)
+        waves.append(wv)
+    return np.array(waves).reshape(len(waves),1)
+
+def Isamples_builder(filelist):
+    """Makes a Isamples numpy file if there was a problem when running
+    BBCEAS_Measure and the Isamples file was not automatically generated
+    Takes the generated individual spectra txt files and returns an
+    Isamples numpy file"""
+    for ele in filelist:
+        spectra=np.loadtxt(ele)
+        try:
+            isamples=np.concatenate((isamples,spectra[:,1].reshape(len(spectra[:,1]),1)),axis=1)
+        except:
+            isamples=np.copy(spectra)
+    np.save("Isamples_generated",isamples)
+    print("Filelist size: ",len(filelist),"Isamples shape: ", isamples.shape)

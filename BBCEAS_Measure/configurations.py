@@ -10,6 +10,12 @@ folder_symbol = "\\"
 
 
 ### The following are instrument configurations (used in both Blank and Sample)
+# Wavelength calibration factors (we calculate wavelengths from pixels ourselves)
+calfactors=(2.47080093383789e2,
+        1.69589176774025e-1,
+        -3.51128119291388e-6,
+        -1.37265324107183e-10)
+
 # Number of accumulations (sum of spectra to increase S/N)
 accums = 50
 
@@ -20,8 +26,8 @@ itime = 200
 averages = 1
 
 # Number of samples to take (e.g. 30 for blank, 999999 for a long sampling event)
-samples_blank = 30
-samples = 400
+samples_blank = 5
+samples = 5
 
 # How many times it will query the instrument to make see if ready (calls per itime)
 checkrate = 10
@@ -38,10 +44,15 @@ upper_wavelength = 459
 
 # Reference and background filenames to load, they should be located in the local dir
 back_filename = "background.npy"
-no2_refname = "NO2.npy"
-chocho_refname = "CHOCHO.npy"
+no2_refname = "NO2_AvSC.npy"
+chocho_refname = "CHOCHO_AvSC.npy"
 
 # Effective Reflectivity, check lab notebook on more information, can be a vector 
 # to call using np.load, or it can be a constant
 Reff = 0.99945
+
+# Dilution factor, units are sccm
+tflow = 5200
+n2flow = 150
+
 

@@ -49,11 +49,12 @@ handle = av.AVS_Activate(retn[1])
 config = av.DeviceConfigType
 ret = av.AVS_GetParameter(handle, 63484, 63484, config)
 pixels = ret[1].m_Detector_m_NrPixels
-wavelengths = []
-ret = av.AVS_GetLambda(handle,wavelengths)
-for pixel in range(pixels):
-    wavelengths.append(ret[pixel])
-    
+
+#########################################################################################
+### Calculating the wavelengths with the calibration factors from configuration file  ###
+
+wavelengths = cf.avantes_calibrator(pixels,*conf.calfactors)
+
 #########################################################################################
 ### Configurations                                                                    ###
 
@@ -93,11 +94,11 @@ ax1 = fig.add_subplot(111)      # Axes 1: Signal
 t0=dt.datetime.now()            # Start time
 
 # Initializing measurements array
-measurements = np.array(wavelengths).reshape(len(wavelengths),1)
+measurements = np.copy(wavelengths)
 
 for n in range(samples):        # Sample loop
     print("Measurement number: ", n+1)
-    counts = np.zeros(len(wavelengths))
+    counts = np.zeros(pixels)
 
     for i in range(accums):     # Accumulations loop
         #print(i+1)
@@ -114,18 +115,14 @@ for n in range(samples):        # Sample loop
         spectraldata = []
         ret = av.AVS_GetScopeData(handle, timestamp, spectraldata)
         timestamp = ret[0]
-        spectra = np.array(ret[1][0:len(wavelengths)])
+        spectra = np.array(ret[1][0:pixels])
         counts = np.add(counts,spectra) 
     
     ### Plotting
     ax1.cla()
-    ax1.plot(wavelengths,counts)
+    ax1.plot(wavelengths[:,0],counts)
     fig.canvas.draw()
     fig.canvas.flush_events()
-    #fig.clear()
-    #plt.plot(wavelengths,counts)
-    #plt.show()
-    #plt.pause(0.001)
 
     ### Measurements array
     measurements = np.concatenate((measurements,counts.reshape(len(counts),1)),axis=1)

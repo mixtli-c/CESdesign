@@ -281,8 +281,8 @@ def Mfile_read(mfilename):
         col2.append(float(ele[1]))
         
         try:
-            col3.append(float(ele[2]))
             col4.append(float(ele[3]))
+            col3.append(float(ele[2]))
         except:
             try:
                 col3.append(float(ele[2]))
@@ -322,3 +322,27 @@ def RAMA_read(ramafilename):
 
     return dates,ppbs
 
+def avantes_calibrator(length,intercept,c1,c2,c3):
+    """Takes the length of ha spectrum (i.e. number of pixels)
+    and the calibration factors, generates corrected wavelengths
+    as a pixels x 1 array"""
+    waves = []
+    for i in range(length):
+        pixel = i+1
+        wv= intercept+c1*pixel+c2*pow(pixel,2)+c3*pow(pixel,3)
+        waves.append(wv)
+    return np.array(waves).reshape(len(waves),1)
+
+def Isamples_builder(filelist):
+    """Makes a Isamples numpy file if there was a problem when running
+    BBCEAS_Measure and the Isamples file was not automatically generated
+    Takes the generated individual spectra txt files and returns an
+    Isamples numpy file"""
+    for ele in filelist:
+        spectra=np.loadtxt(ele)
+        try:
+            isamples=np.concatenate((isamples,spectra[:,1].reshape(len(spectra[:,1]),1)),axis=1)
+        except:
+            isamples=np.copy(spectra)
+    np.save("Isamples_generated",isamples)
+    print("Filelist size: ",len(filelist),"Isamples shape: ", isamples.shape)

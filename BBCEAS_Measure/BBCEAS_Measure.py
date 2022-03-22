@@ -32,8 +32,11 @@ back_filename = conf.back_filename
 no2_refname = conf.no2_refname
 chocho_refname = conf.chocho_refname
 
-# Reff : Either number or np.load(Reff_matrix)
+# Reff : Either a number conf.Reff or a vector np.load(conf.Reff_matrix)
 Reff= conf.Reff
+
+# Dilution factor
+dfactor = 1-(conf.n2flow/conf.tflow)
 
 #########################################################################################
 ### Reference and Background file loading for analisis                                ###
@@ -72,10 +75,6 @@ handle = av.AVS_Activate(retn[1])
 config = av.DeviceConfigType
 ret = av.AVS_GetParameter(handle, 63484, 63484, config)
 pixels = ret[1].m_Detector_m_NrPixels
-wavelengths = []
-ret = av.AVS_GetLambda(handle,wavelengths)
-for pixel in range(pixels):
-    wavelengths.append(ret[pixel])
     
 #########################################################################################
 ### Configurations                                                                    ###
@@ -118,7 +117,7 @@ ax3 = ax2.twinx()               # Axes 3 : Concentration CHOCHO
 t0=dt.datetime.now()            # Start time
 
 # Initializing timestamp and concentration list, and measurement array
-measurements = np.array(wavelengths).reshape(len(wavelengths),1)
+measurements = np.array(background[:,0]).reshape(len(background[:,0]),1)
 meastime = np.zeros(samples,dtype='U19')
 meastime2 = []
 ppbs = np.zeros(samples)
@@ -127,7 +126,7 @@ area = np.zeros(samples)
 
 for n in range(samples):        # Sample loop
     print("Measurement number: ", n+1)
-    counts = np.zeros(len(wavelengths))
+    counts = np.zeros(pixels)
 
     for i in range(accums):     # Accumulations loop
         #print(i+1)
@@ -144,7 +143,7 @@ for n in range(samples):        # Sample loop
         spectraldata = []
         ret = av.AVS_GetScopeData(handle, timestamp, spectraldata)
         timestamp = ret[0]
-        spectra = np.array(ret[1][0:len(wavelengths)])
+        spectra = np.array(ret[1][0:pixels])
         counts = np.add(counts,spectra) 
     
     ### Calculating number density
@@ -158,8 +157,8 @@ for n in range(samples):        # Sample loop
     I_0 = np.average(bckg[:,1:],axis=1).reshape(len(bckg),1)
     
     ### This one does everything (see recursive_fit_2ref function in CESfunctions.py)
-    ndensity1, ndensity2 = cf.fit_alg_1(I_sample, I_0, Reff, distance, 
-            no2ref,glyref)
+    alpha,fl,a,b,ndensity1, ndensity2 = cf.fit_alg_1(I_sample, I_0, Reff, distance, 
+            no2ref,glyref,parameters=1)
     
     ### The timestamp for this measurement is now
     timenow = dt.datetime.now()
@@ -172,8 +171,8 @@ for n in range(samples):        # Sample loop
     np.savetxt(path_file+'Is'+stamp+'.txt',measurements[:,[0,n+1]],fmt='%s')
 
     ### Populate ppbs and meastime arrays with currents sample, make/overwrite datafile
-    ppbs[n] = ndensity1/2.5e10
-    ppbs2[n] = ndensity2/2.5e10
+    ppbs[n] = (ndensity1/2.504e10)/dfactor
+    ppbs2[n] = (ndensity2/2.504e10)/dfactor
     meastime[n] = timenow.strftime('%Y/%m/%d-%H:%M:%S')
     area[n] = np.trapz(counts[minwave:maxwave+1])
        
@@ -187,7 +186,8 @@ for n in range(samples):        # Sample loop
     ax1.cla()
     ax2.cla()
     ax3.cla()
-    ax1.plot(wavelengths[minwave:maxwave+1],counts[minwave:maxwave+1])
+    ax1.plot(bckg[:,0],alpha,'-k')
+    ax1.plot(bckg[:,0],a+b*fl+no2ref[:,1]*ndensity1+glyref[:,1]*ndensity2,'-b')
     ax2.plot(meastime2[:n+1],ppbs[:n+1],'-g')
     ax3.plot(meastime2[:n+1],ppbs2[:n+1],'-b',alpha=0.5)
     ax2.xaxis.set_major_formatter(DateFormatter("%H:%M"))
