@@ -228,7 +228,7 @@ def fit_signal_w_fl(extinction,f_l,reference1,reference2):
     d=x_hat[3,0]
     return a,b,c,d
 
-def fit_alg_1(I_sample,I_0,Reff,distance,reference1,reference2,verbose=1,parameters=0):
+def fit_alg_1(I_sample,I_0,Reff,distance,reference1,reference2,verbose=1,parameters=0,choice=2):
     """Fitting algorithm 1:
     Calculates the extinction, fits two references using SVD, then obtains a 
     parametric function, recalculates the original extinction with the two
@@ -252,10 +252,55 @@ def fit_alg_1(I_sample,I_0,Reff,distance,reference1,reference2,verbose=1,paramet
     if verbose == 1:
         print("First N1: ",density1/2.5e10," Second N1: ",c/2.5e10)
         print("First N2: ",density2/2.5e10," Second N2: ",d/2.5e10)
-    if parameters == 1:
-        return alpha,fl,a,b,c,d
-    else:
-        return c,d
+    
+    if choice == 1:
+        if parameters == 1:
+            return alpha,fl,a,b,density1,density2
+        else:
+            return density1,density2
+
+    if choice == 2:
+        if parameters == 1:
+            return alpha,fl,a,b,c,d
+        else:
+            return c,d
+
+def fit_alg_2(I_sample,I_0,Reff,distance,reference1,reference2,verbose=1,parameters=0,choice=2):
+    """Fitting algorithm 2:
+    Calculates the extinction, fits one references using SVD, then obtains a 
+    parametric function, fits the second reference
+    Developed to try to clean the glyoxal area of the signal as much as possible."""
+    alpha = extinction(I_sample,I_0,Reff,distance)
+    a,b,c = fit_signal(alpha,reference1)
+    d=0
+    
+    if c<0:
+        c=0
+
+    residual = alpha[:,0]-c*reference1[:,1]
+    residual = residual.reshape(len(residual),1)
+    fl = get_fl_broad(residual,reference1,reference2,0,0,npoints=51,npoly=8)
+    residual = residual[:,0]-fl
+    a,b,d = fit_signal(residual,reference2)
+    ndensity1 = c
+    ndensity2 = d
+    a,b,c,d = fit_signal_w_fl(alpha,fl,ndensity1*reference1,ndensity2*reference2)
+    
+    if verbose == 1:
+            print("First N1: ",ndensity1/2.5e10," Second N1: ",c*ndensity1/2.5e10)
+            print("First N2: ",ndensity2/2.5e10," Second N2: ",d*ndensity2/2.5e10)
+    
+    if choice == 1:
+        if parameters == 1:
+            return alpha,fl,a,b,ndensity1,ndensity2
+        else:
+            return ndensity1,ndensity2
+
+    if choice == 2:
+        if parameters == 1:
+            return alpha,fl,a,b,c*ndensity1,d*ndensity2
+        else:
+            return c*ndensity1,d*ndensity2
 
 def Mfile_read(mfilename):
     """This function reads a measurements text file (Mfile) and generates lists of the
