@@ -1,5 +1,5 @@
 ###################################################################################################
-# DAQ POLLING SCRIPT FOR ADVANTECG MIC1816
+# DAQ POLLING SCRIPT FOR ADVANTECH MIC1816
 # 
 # This script uses the proprietary Advantech Python libraries
 #
