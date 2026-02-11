@@ -6,6 +6,8 @@ from time import sleep
 from scipy.optimize import least_squares
 import numpy as np
 import datetime as dt
+import subprocess
+import threading as th
 
 class App:
     """Define the application class."""
@@ -33,7 +35,7 @@ class App:
                                         # check COMM_FORMAT command for LeCroy instruments
 
         self.scanmatevi = 'ASRL1::INSTR'     # pyvisa name for INSTR at serial COM1
-        self.lecroyvi = 'GPIB5::1::INSTR'    # pyvisa name for INSTR at GPIB channel 1
+        self.lecroyvi = 'GPIB0::5::INSTR'    # pyvisa name for INSTR at GPIB channel 1
                                         # you can check them by the list.resources() method
                                         # check pyvisa DOCS for further info
 
@@ -42,39 +44,48 @@ class App:
         self.waveblank = 308                 # wavelength for tau_0
 
         # Fitting parameters
-        self.len_offset = 300                # Length of baseline offset for logarithm fitting
-        self.start_fit = 600
-        self.end_fit = 5000
+        self.len_offset = 500                # Length of baseline offset for logarithm fitting
+        self.start_fit = 3000
+        self.end_fit = 8000
         self.x0 = np.array([0,2,-50000])     # x0 for least_squares()
 
         # Cycle parameters
         self.sweeps = 30
-        self.runtime = 1.1 * (sweeps/10)
-
+        self.runtime = 1.1 * (self.sweeps/10)
+        self.taus=[]
+        self.tstamp=[]
+        self.run=False
+        self.p=None
+        self.my_thread = None
         ######################### END OF PARAMETERS #############################################
         ### Initialising dictionary for variables
         self.keyvars = {}
 
         ### Frame 1: Radiobuttons
         self.frame1 = tk.Frame(self.root)
-        #self.radio = Radiobutton(self.frame1,'ID;Set A0;Set A1;Set PWM;Ground Outputs;Read Inputs;Diff. Measurement', 'print(self.mssg)')
-        # We add a button to test our setup
-        self.test_button = tk.Button(self.frame1, text="Start", command=self.run_mode)
-        self.test_button.grid(row=1,column=0)
         self.frame1.grid(row=1,column=0,columnspan=15,sticky='we')
 
         # Add windows where we are going to write the std output.
-        self.console_text = tk.Text(self.root, state='disabled', height=10)
-        self.console_text.grid(row=2,column=0,rowspan=20,columnspan=15,sticky='we')
+        self.console_text = tk.Text(self.root, state='disabled', height=15)
+        self.console_text.grid(row=1,column=0,rowspan=10,columnspan=15,sticky='we')
 
         # We redirect sys.stdout -> TextRedirector
         self.redirect_sysstd()
 
+        # We add a button to test our setup
+        self.start_button = tk.Button(self.root, text="Start", command=self.start_acq)
+        self.start_button.config(state=tk.NORMAL)
+        self.start_button.grid(row=15,column=0)
+
+        self.stop_button = tk.Button(self.root, text="Stop", command=self.stop_acq)
+        self.stop_button.config(state=tk.DISABLED)
+        self.stop_button.grid(row=15,column=2)
+
         #### Resource initialization and opening
 
         self.rm = ResourceManager()
-        #print(rm.list_resources()) ### uncomment to look at the names
-        self.lecroy = rm.open_resource(lecroyvi)
+        #print(self.rm.list_resources()) ### uncomment to look at the namess
+        self.lecroy = self.rm.open_resource(self.lecroyvi)
         #self.scanmate = rm.open_resource(scanmatevi,
         #                            stop_bits = constants.StopBits.two,
         #                            read_termination = '\r',
@@ -84,15 +95,15 @@ class App:
         #lecroy.write('DISP OFF')   # uncomment to stop display
         self.lecroy.write('COMM_HEADER OFF')
         self.lecroy.write('COMM_FORMAT OFF,WORD,HEX')
-        self.lecroy.write('TA:DEF EQN,\'AVGS(C1)\',MAXPTS,100000,SWEEPS,%i' %sweeps)
+        self.lecroy.write('TA:DEF EQN,\'AVGS(C1)\',MAXPTS,100000,SWEEPS,%i' %self.sweeps)
         #lecroy.write('CLM M1')     # clear memory M1
 
         #### Good to go queries
-        print('LECROY:',lecroy.query('ALST?')) # ALL STATUS just to make sure it works
+        print('LECROY:',self.lecroy.query('ALST?')) # ALL STATUS just to make sure it works
         #print('SCANMATE:',scanmate.query('S?')) # STATUS to make sure it gets R
 
         #### Waveform info
-        self.counts,self.vertgain,self.vertoff,self.horint,self.horoff = getWaveformParams(self.lecroy)
+        self.counts,self.vertgain,self.vertoff,self.horint,self.horoff = self.getWaveformParams()
         self.tdivs = np.arange(self.counts)*self.horint+self.horoff
 
     def redirect_sysstd(self):
@@ -100,7 +111,7 @@ class App:
         sys.stdout = TextRedirector(self.console_text, "stdout")
         sys.stderr = TextRedirector(self.console_text, "stderr")
 
-    def getFloat(res):
+    def getFloat(self,res):
         '''
         Gets a splitted string response to a query and converts what it can to a float
         '''
@@ -111,7 +122,7 @@ class App:
                 pass
         return number
 
-    def getInt(res):
+    def getInt(self,res):
         '''
         Gets a splitted string response to a query and converts what it can to an integer
         '''
@@ -122,7 +133,7 @@ class App:
                 pass
         return number
 
-    def getChunks(hexes,size,vertgain,vertoff):
+    def getChunks(self,hexes,size,vertgain,vertoff):
         '''
         Converts the waveform HEX DAT1 string to values by chunking the string,
         converting each chunk into HEX, then into big endian signed integers, and
@@ -144,73 +155,47 @@ class App:
         Gets needed waveform parameters from a series of queries that are converted
         to integer or float depending on the parameters
         '''
-        counts = getInt(self.lecroy.query('TA:INSPECT? \"WAVE_ARRAY_COUNT\"').split())
+        counts = self.getInt(self.lecroy.query('TA:INSPECT? \"WAVE_ARRAY_COUNT\"').split())
         print('Counts:',counts)
 
-        vertgain = getFloat(self.lecroy.query('TA:INSPECT? \"VERTICAL_GAIN\"').split())
+        vertgain = self.getFloat(self.lecroy.query('TA:INSPECT? \"VERTICAL_GAIN\"').split())
         print('Vertical gain:',vertgain)
 
-        vertoff = getFloat(self.lecroy.query('TA:INSPECT? \"VERTICAL_OFFSET\"').split())
+        vertoff = self.getFloat(self.lecroy.query('TA:INSPECT? \"VERTICAL_OFFSET\"').split())
         print('Vertical offset:',vertoff)
 
-        horint = getFloat(self.lecroy.query('TA:INSPECT? \"HORIZ_INTERVAL\"').split())
+        horint = self.getFloat(self.lecroy.query('TA:INSPECT? \"HORIZ_INTERVAL\"').split())
         print('Horizontal interval:',horint)
 
-        horoff = getFloat(self.lecroy.query('TA:INSPECT? \"HORIZ_OFFSET\"').split())
+        horoff = self.getFloat(self.lecroy.query('TA:INSPECT? \"HORIZ_OFFSET\"').split())
         print('Horizontal offset:',horoff)
 
         return counts,vertgain,vertoff,horint,horoff
 
-    def gendata(t,a,b,c):
+    def gendata(self,t,a,b,c):
         '''
         Generates the exponential fit
         '''
         return a+b*np.exp(t*c)
 
-    def funct(x,t,y):
+    def funct(self,x,t,y):
         '''
         Function to fit with optimize.least_squares
         '''
         return x[0] + x[1]*np.exp(x[2]*t)-y
 
-    def run_mode(self):
+    def run_acq(self):
         #### Begin measurements
         ## Moves to blank wavelength and sets check variable
         #scanmate.write('X=%.3f' %waveblank)
         #isblank = True
         # Initializes lists
-        pid = subprocess.Popen(["python","OHCRDS_plotter.py"]).pid
-        taus = []
-        tstamp = []
+        self.p = subprocess.Popen(["python","OHCRDS_plotter.py"])
+        self.taus = []
+        self.tstamp = []
         i=0
-        waveform = np.arange(self.counts-1)
-        while True:
-            try:
-                with open('endme','r') as f:
-                    read=f.read()
-                os.remove("endme")
-                t1 = dt.datetime.now()                  # End time
-                #print("Seconds elapsed: ",(t1-t0).total_seconds())
-                # Generates arrays to export to npy or txt
-                taumat = np.array(taus)
-                tstampmat = np.array(tstamp,dtype='U19')
-
-                # Saves NPY files
-                #np.save('taus.npy', taumat) ### The taus as npy
-                #np.save('waveform.npy',waveform) ### The last waveform as npy
-                #np.save('timestamps.npy',tstampmat) ### The timestamps as npy
-
-                # Saves TXT file: [timestamp tau]
-                np.savetxt("M" + t1.strftime('%y%m%d%H%M') + '.txt',np.column_stack((tstampmat,taumat)),fmt='%s')
-
-                ### Some rough statistical data in case you want to know
-                print('Average TAU: %.2f' %np.average(taumat))
-                print('Stdev: %.2f' %np.std(taumat))
-                break
-
-            except:
-                pass
-
+        waveforms = np.arange(self.counts)
+        while self.run:
             ## Resets the trace, waits for ready
             ta = dt.datetime.now()
             self.lecroy.write('TA:FRST')
@@ -231,8 +216,10 @@ class App:
             data = self.lecroy.query('M1:WF? DAT1').split()
             t2 = dt.datetime.now()
             print((t2-t1).total_seconds())
-            values = getChunks(data[-1],self.size,self.vertgain,self.vertoff)
-            waveform = np.array(values[:-1])
+            values = self.getChunks(data[-1],self.size,self.vertgain,self.vertoff)
+            waveform = np.array(values)#[:-1])
+            waveforms = np.column_stack((waveforms,waveform))
+            print(self.tdivs.shape,waveform.shape)
 
             # Prepare data for fitting
             ts=self.tdivs[self.start_fit:self.end_fit]
@@ -245,7 +232,7 @@ class App:
             #                       args=(ts,ys))
 
             # TRF
-            res_log = least_squares(funct,self.x0, ftol=1e-12,xtol=1e-12,gtol=1e-12,
+            res_log = least_squares(self.funct,self.x0, ftol=1e-12,xtol=1e-12,gtol=1e-12,
                                     loss = 'cauchy', f_scale=0.1, args=(ts,ys))
 
             # The results
@@ -270,20 +257,20 @@ class App:
 
             # Shows and saves tau to a list, timestamps to list as well
             tau = -1e6/xs[2]
-            taus.append(tau)
+            self.taus.append(tau)
             timenow = dt.datetime.now()
             stamp = timenow.strftime('%Y/%m/%d-%H:%M:%S')
-            tstamp.append(stamp)
+            self.tstamp.append(stamp)
             print('TAU is: %.2f' %tau)
 
             # Builds the fit = non fitted waveform + generated data from params
             fita = waveform[:self.start_fit]
-            fitb = gendata(self.tdivs[self.start_fit:-1],*xs)
+            fitb = self.gendata(self.tdivs[self.start_fit:],*xs)
             fit = np.concatenate((fita,fitb))
 
-            np.save("ax1data", np.concatenate((self.tdivs,waveform),axis=1))
-            np.save("ax1adata", np.concatenate((self.tdivs,fit),axis=1))
-            np.save("ax2data", np.concatenate((self.tdivs,waveform-fit),axis=1))
+            np.save("ax1data", np.column_stack((self.tdivs,waveform)))
+            np.save("ax1adata", np.column_stack((self.tdivs,fit)))
+            np.save("ax2data", np.column_stack((self.tdivs,waveform-fit)))
 
 
             # wavelength change
@@ -299,42 +286,65 @@ class App:
             # Total computing time in cycle, rest will be sleeping
             t3 = dt.datetime.now()
             print((t3-t1).total_seconds())
-            sleep(runtime-(t3-t1).total_seconds())
+            sleep(self.runtime-(t3-t1).total_seconds())
             #waitReady(lecroy,0.01) ### Deprecated due to problems with WaitReady()
 
             # Total cycle time
             t4 = dt.datetime.now()
             print((t4-t1).total_seconds())
+            i+=1
+        t1 = dt.datetime.now()                  # End time
+        #print("Seconds elapsed: ",(t1-t0).total_seconds())
+        # Generates arrays to export to npy or txt
+        taumat = np.array(self.taus)
+        tstampmat = np.array(self.tstamp,dtype='U19')
+
+        # Saves NPY files
+        #np.save('taus.npy', taumat) ### The taus as npy
+        np.save('W'+t1.strftime('%y%m%d%H%M')+'.npy',waveforms) ### The waveforms as npy
+        #np.save('timestamps.npy',tstampmat) ### The timestamps as npy
+
+        # Saves TXT file: [timestamp tau]
+        np.savetxt("M" + t1.strftime('%y%m%d%H%M') + '.txt',np.column_stack((tstampmat,taumat)),fmt='%s')
+
+        ### Some rough statistical data in case you want to know
+        print('Average TAU: %.2f' %np.average(taumat))
+        print('Stdev: %.2f' %np.std(taumat))
 
 
-class LabelEntry:
-    def __init__(self,place,keyvars={'Entry':'0'}):
-        sef.val = tk.StringVar()
-        for k,v in keyvars.times():
-            r = tk.Radiobutton(place, text=item, variable=self.val,
-                                value=i, command=self.cb, **kwargs)
-            r.grid(row=1,column=i)#,sticky='w')
-            #r.pack(side=tk.LEFT)
+    def start_acq(self):
+        self.start_button.config(state=tk.DISABLED)
+        self.stop_button.config(state=tk.NORMAL)
+        try:
+            if self.my_thread.is_alive():
+                print("Closing previous thread.")
+                self.my_thread.join()
+                print("Thread closed, starting acquisition.")
+            else:
+                print("Starting acquisition.")
+        except:
+            print("Starting acquisition.")
+        self.run = True
+        self.my_thread = th.Thread(target=self.run_acq)
+        self.my_thread.start()
 
-class Radiobutton:
-    """Create a list-based Radiobutton object."""
+    def stop_acq(self):
+        self.start_button.config(state=tk.NORMAL)
+        self.stop_button.config(state=tk.DISABLED)
+        try:
+            self.p.terminate()
+        except:
+            print("No subprocess to terminate?")
+        self.run=False
 
-    def __init__(self, place, items='Radiobutton', cmd='', val=0, **kwargs):
-        self.items = items.split(';')
-        self.cmd = cmd
-        self.val = tk.IntVar()
-        self.val.set(val)
-        self.item = self.items[self.val.get()]
-        for i, item in enumerate(self.items):
-            r = tk.Radiobutton(place, text=item, variable=self.val,
-                                value=i, command=self.cb, **kwargs)
-            r.grid(row=1,column=i)#,sticky='w')
-            #r.pack(side=tk.LEFT)
-    def cb(self):
-        """Evaluate the cmd string in the Radiobutton context."""
-        self.item = self.items[self.val.get()]
-        self.mssg = 'Mode '+self.item+' selected'
-        exec(self.cmd)
+
+        print("Terminating acquisition.")
+        self.my_thread.join(timeout=.1)
+
+        #self.my_thread.join()
+        #print("resetting thread")
+        #self.my_thread = None
+        #print(self.run)
 
 class TextRedirector(object):
     def __init__(self, widget, tag):

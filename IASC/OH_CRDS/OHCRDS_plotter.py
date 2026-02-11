@@ -57,5 +57,3 @@ ani = animation.FuncAnimation(fig,animate,init_func=init_func,
         interval=1000,blit=False,cache_frame_data=False)
 plt.show()
 
-with open('endme', 'w') as f:
-    f.write('EndMe!')
