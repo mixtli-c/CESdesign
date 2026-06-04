@@ -2,6 +2,8 @@ import os
 import subprocess
 import datetime as dt
 import numpy as np
+import tkinter as tk
+from tkinter import ttk
 from time import sleep
 
 # Local
@@ -35,7 +37,11 @@ class App:
         self.root.title('IBBCEAS Control GUI')
 
         ### Initialising SDK
-        self.the_dev = IBM4_Lib.Ser_Iface() # find the first connected IBM4, open in DC mode by default
+        self.sdk = atmcd()  # Load atmcd library
+        ret = sdk.Initializer(r"c:\Program Files\Andor SDK\\") # Initialize camera, path points to DETECTOR.INI
+        if errors.Error_Codes.DRV_SUCCESS != ret:
+            print("...Could not initialize camera with error {}, will exit".format(ret))
+            sys.exit()
 
         ### Initialising dictionary for variables
         self.keyvars = {}
